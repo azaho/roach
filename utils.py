@@ -15,7 +15,7 @@ from moviepy.editor import VideoFileClip
 
 import pyktok as pyk
 
-PYK_BROWSER = 'firefox' 
+PYK_BROWSER = 'safari' 
 
 from dotenv import load_dotenv
 # Load environment variables from .env file
@@ -329,7 +329,7 @@ def check_disinformation(text):
 
     # Instructions for getting Russian narratives
     russian_narratives_instructions = (
-        "1-2 known Russian narratives present in the text in 3-8 words, then the corresponding integer ID"
+        "2-3 known Russian narratives present in the text in 3-8 words, then match with the corresponding narrative number (1-25)"
     )
 
     if early_yes:
@@ -418,8 +418,9 @@ def tag_narratives(url):
     transcript = metadata["transcript"]
     result = check_disinformation(transcript)
     disinformation_found = result["result"] == 1
+    narratives = result["narratives"][1::2]  # get integer ids, skipping over narrative strings
     update_metadata(url, "disinformation_found", disinformation_found)
-    update_metadata(url, "narratives", result["narratives"])
+    update_metadata(url, "narratives", narratives)
 
 
 ### Test case if run as main
