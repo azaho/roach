@@ -86,7 +86,7 @@ def download_video(url: str):
     update_metadata(url, "local_video_path", new_video_path)
 
     # write video metadata
-    video_metadata = get_video_metadata(metadata_path)
+    video_metadata = get_video_metadata(metadata_path, single_video=True)
     update_metadata(url, "username", video_metadata["author"]["username"])
     update_metadata(url, "timestamp", video_metadata["timestamp"])
     update_metadata(url, "stats", video_metadata["stats"])
@@ -94,33 +94,33 @@ def download_video(url: str):
     update_metadata(url, "location", video_metadata["location"])
     os.remove(metadata_path)
 
-def get_video_metadata(metadata_path: str):
+def get_video_metadata(metadata_path: str, single_video: bool = False):
     """Extracts info from a video's metadata csv and writes to global metadata."""
     video_data = {}
     with open(metadata_path) as f:
         reader = csv.DictReader(f)
         # there's just one row, but we read them all anyway
-        row = next(reader)
-        vid = row['video_id']
-        video_data = {
-            'video_id': row['video_id'],
-            'timestamp': row['video_timestamp'],
-            'stats': {
-                'duration': int(row['video_duration']),
-                'likes': int(row['video_diggcount']),
-                'shares': int(row['video_sharecount']), 
-                'comments': int(row['video_commentcount']),
-                'plays': int(row['video_playcount'])
-            },
-            'author': {
-                'username': row['author_username'],
-                'name': row['author_name']
-            },
-            'description': row['video_description'],
-            'location': row['video_locationcreated']
-        }
-        print(row)
-    return video_data
+        for row in reader:
+            vid = row['video_id']
+            if vid not in video_data:
+                video_data[vid] = {
+                    'video_id': row['video_id'],
+                    'timestamp': row['video_timestamp'],
+                    'stats': {
+                        'duration': int(row['video_duration']),
+                        'likes': int(row['video_diggcount']),
+                        'shares': int(row['video_sharecount']), 
+                        'comments': int(row['video_commentcount']),
+                        'plays': int(row['video_playcount'])
+                    },
+                    'author': {
+                        'username': row['author_username'],
+                        'name': row['author_name']
+                    },
+                    'description': row['video_description'],
+                    'location': row['video_locationcreated']
+                }
+    return video_data if not single_video else list(video_data.values())[0]
 
 ### Extract comments
 
@@ -191,19 +191,27 @@ def transcribe_mp4(url: str):
 
 ### Get user's videos
 
-def get_video_urls_from_user(username: str):
-    """Takes username and returns some recent videos by them."""
+def get_video_urls_from_user(username: str, n=3):
+    """Takes username and returns urls of some recent videos by them."""
+    metadata_path = os.path.join(DATA_DIR, hash_url(url) + "_videos.json")
     try:
-        videos_path = os.path.join(DATA_DIR, hash_url(url) + "_videos.json")
         pyk.save_tiktok_multi_page(
             username,
             ent_type='user',
+            video_ct=n,
             save_video=False,
-            metadata_fn=videos_path,
+            metadata_fn=metadata_path,
         )
     except:
         pass
 
+    video_metadata = get_video_metadata(metadata_path, single_video=False)
+    urls = [
+        f'https://www.tiktok.com/@{username}/video/{video_id}'
+        for video_id, data in video_metadata.items()
+    ]
+    os.remove(metadata_path)
+    return urls
 
 
 ### Test case if run as main
@@ -222,6 +230,6 @@ if __name__ == "__main__":
     download_video(url)
     extract_comments(url)
     transcribe_mp4(url)
-    #urls = get_video_urls_from_user("cakedivy")
-    #print(urls)
+    urls = get_video_urls_from_user("cakedivy")
+    print(urls)
     write_metadata()
