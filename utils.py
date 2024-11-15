@@ -10,7 +10,15 @@ from openai import OpenAI
 from moviepy.editor import VideoFileClip
 
 import pyktok as pyk
-pyk.specify_browser('safari')
+
+PYK_BROWSER = 'firefox' 
+
+from dotenv import load_dotenv
+# Load environment variables from .env file
+load_dotenv()
+
+
+pyk.specify_browser(PYK_BROWSER)
 
 metadata = {}
 METADATA_FILE = "metadata.json"
@@ -65,7 +73,7 @@ def download_video(url: str):
         url,
         True,
         metadata_path,
-        'safari',
+        PYK_BROWSER,
         return_fns=True,
     )
 
@@ -111,6 +119,7 @@ def get_video_metadata(metadata_path: str):
             'description': row['video_description'],
             'location': row['video_locationcreated']
         }
+        print(row)
     return video_data
 
 ### Extract comments
@@ -135,6 +144,8 @@ def get_comment_data(comment):
         'text': comment.text,
         'likes': comment.digg_count,
         'timestamp': comment.create_time,
+        'is_liked_by_author': comment.is_author_digged,
+        'is_top_list_marked': ('top_list' in comment.sort_tags)
     }
 
 def extract_comments(url: str, n=30):
@@ -199,6 +210,15 @@ def get_video_urls_from_user(username: str):
 
 if __name__ == "__main__":
     url = 'https://www.tiktok.com/@cakedivy/video/7427654268519189791?is_from_webapp=1&sender_device=pc'
+    os.makedirs(DATA_DIR, exist_ok=True)
+    for file in os.listdir(DATA_DIR):
+        file_path = os.path.join(DATA_DIR, file)
+        try:
+            if os.path.isfile(file_path):
+                os.unlink(file_path)
+        except Exception as e:
+            print(f"Error deleting {file_path}: {e}")
+
     download_video(url)
     extract_comments(url)
     transcribe_mp4(url)
