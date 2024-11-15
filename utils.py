@@ -409,15 +409,8 @@ def check_disinformation(text):
         response_json = completion.choices[0].message.content
         return json.loads(response_json)
 
-narratives = []
-NARRATIVES_PATH = "narratives.json"
 def tag_narratives(url):
     """Takes video url and reads its transcript to tag with disinformation narratives."""
-    global narratives
-    if narratives == []:
-        with open(NARRATIVES_PATH, 'r') as f:
-            narratives = json.load(f)["narratives"]
-    
     metadata = get_metadata(url)
     transcript = metadata["transcript"]
     result = check_disinformation(transcript)
