@@ -1,10 +1,14 @@
 # utils.py
 import os
+import re
 import csv
 import ast
 import json
 import hashlib
 import pandas as pd
+from typing import Union
+from pydantic import BaseModel
+from datetime import datetime, timezone
 
 from openai import OpenAI
 from moviepy.editor import VideoFileClip
@@ -24,6 +28,15 @@ metadata = {}
 METADATA_FILE = "metadata.json"
 DATA_DIR = "tiktok_data/"
 
+### OpenAI client
+
+client = None
+def get_openai_client():
+    global client
+    if client == None:
+        client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
+    return client
+
 ### URL helpers
 
 def clean_url(url: str) -> str:
@@ -41,13 +54,16 @@ def write_metadata():
     with open('metadata.json', 'w') as f:
         f.write(json.dumps(metadata))
 
-def update_metadata(url: str, update_key: str, update_val):
-    """Add field to a video's metadata."""
+def sync_metadata():
+    """Load from metadata file into local memory."""
     global metadata
     if metadata == {}:
         with open(METADATA_FILE, 'r') as f:
             metadata = json.load(f)
 
+def update_metadata(url: str, update_key: str, update_val):
+    """Add field to a video's metadata."""
+    sync_metadata()
     url = clean_url(url)
     if url not in metadata:
         metadata[url] = {"url": url}
@@ -171,7 +187,7 @@ def transcribe_mp4(url: str):
 
     url = video_metadata["url"]
     video_path = video_metadata["local_video_path"]
-    client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
+    client = get_openai_client()
     video = VideoFileClip(video_path)
     audio_filename = video_path.replace('.mp4', '.mp3')
 
@@ -191,6 +207,16 @@ def transcribe_mp4(url: str):
 
 ### Get user's videos
 
+THREE_DAYS_OLD = 3 * 3600 * 24
+def video_is_recent(video_data: dict):
+    """Takes video data and returns whether it's from the last few days."""
+    timestamp_str = video_data["timestamp"]
+    timestamp = datetime.strptime(timestamp_str, "%Y-%m-%dT%H:%M:%S")
+    timestamp = timestamp.replace(tzinfo=timezone.utc)
+    current_time = datetime.now(timezone.utc)
+    time_diff_in_seconds = abs((current_time - timestamp).total_seconds())
+    return time_diff_in_seconds < THREE_DAYS_OLD
+
 def get_video_urls_from_user(username: str, n=3):
     """Takes username and returns urls of some recent videos by them."""
     metadata_path = os.path.join(DATA_DIR, hash_url(url) + "_videos.json")
@@ -209,27 +235,203 @@ def get_video_urls_from_user(username: str, n=3):
     urls = [
         f'https://www.tiktok.com/@{username}/video/{video_id}'
         for video_id, data in video_metadata.items()
+        if video_is_recent(data)
     ]
     os.remove(metadata_path)
     return urls
 
 
+### Tag video with narratives (Reality Check!)
+
+# Define Pydantic models for structured responses
+class DisinformationResponseWithResult(BaseModel):
+    result: int
+    narratives: list[Union[str, int]]
+
+class DisinformationResponseOnlyNarratives(BaseModel):
+    narratives: list[Union[str, int]]
+
+known_narratives = """
+1. The "special military operation" is not a war, but a "liberation" of the Ukrainian people.
+2. Ukraine has always been and remains a part of Russia.
+3. Ukraine is a threat to Russia.
+4. The Ukrainian government and military are neo-Nazis.
+5. The Russian language and culture are banned in Ukraine.
+6. Russia is protecting ethnic Russians in Ukraine.
+7. The West is imposing unfair sanctions on Russia.
+8. The real aggressor is Ukraine and NATO, while Russia is the victim.
+9. Ukraine is developing biological weapons with US help.
+10. The Bucha massacre was staged by Ukraine.
+11. Ukraine shot down MH17, not Russia.
+12. The West is using Ukraine to weaken Russia.
+13. Ukrainian refugees are causing problems in host countries.
+14. Ukraine's military successes are exaggerated.
+15. Western weapons sent to Ukraine end up on the black market.
+16. Zelensky has left Ukraine and hasn't returned.
+17. Russian retreats are "goodwill gestures."
+18. Ukrainian troops may revolt against Zelensky.
+19. Ukraine is a failed state.
+20. Diseases are spreading widely in the Ukrainian army.
+21. Ukrainians are ready to kill their own people.
+22. Ukraine is sabotaging peace negotiations with Russia.
+23. The Ukrainian Armed Forces are attacking civilian targets.
+24. Russia does not spread disinformation on its territory.
+25. The conflict can only be resolved if Ukraine surrenders.
+"""
+
+def check_disinformation(text):
+    """Takes text and returns {result: 0 or 1, narratives: list[int]}."""
+    completion = None
+    early_no = None
+    early_yes = None
+
+    # Define regex patterns for detecting "no" or "yes" conclusions.
+    no_regex = re.compile(
+        r"(?:conclusion:|in conclusion,?|ultimately,?)?\s*(?:(?:no[,.]?|the (?:text|snippet|statement) (?:does not|doesn't) contain|(?:this )?(?:statement|text|content) is not)(?!\s+elements? consistent with).*?(?:russian narratives?|russian propaganda|elements? of (?:russian )?propaganda|propagandistic elements?)|\b(?:not propaganda|isn'?t propaganda)\b).*?(?:\.|$)",
+        re.IGNORECASE,
+    )
+    yes_regex = re.compile(
+        r"(?:conclusion:|in conclusion,?|ultimately,?)?\s*(?:yes[,.]?|the (?:text|snippet|statement) (?:does contain|contains)(?:\s+elements? consistent with)?|(?:this )?(?:statement|text|content) is).*?(?:russian narratives?|russian propaganda|elements? of (?:russian )?propaganda|propagandistic elements?).*?(?:\.|$)",
+        re.IGNORECASE,
+    )
+
+    client = get_openai_client()
+    # Use a short unstructured chain-of-thought approach
+    completion = client.chat.completions.create(
+        model="gpt-4o-mini",
+        messages=[
+            {
+                "role": "system",
+                "content": "You are a Russian propaganda detector. Respond concisely.",
+            },
+            {
+                "role": "user",
+                "content": f"""
+                Here's a transcript from a video:
+                <text>
+                {text}
+                </text>
+                
+                Does this text contain Russian narratives or propaganda? Think step-by-step, concisely.
+                """,
+            },
+        ],
+    )
+
+    cot_analysis = completion.choices[0].message.content.strip()
+
+    # Check for early "no" or "yes" conclusions
+    early_no = no_regex.search(cot_analysis)
+    early_yes = yes_regex.search(cot_analysis)
+
+    if early_no:
+        return {"result": 0, "narratives": []}
+
+    # Instructions for getting Russian narratives
+    russian_narratives_instructions = (
+        "1-2 known Russian narratives present in the text in 3-8 words, then the corresponding integer ID"
+    )
+
+    if early_yes:
+        # If early yes, ask for the narratives directly
+        completion = client.beta.chat.completions.parse(
+            model="gpt-4o-mini",
+            messages=[
+                {
+                    "role": "system",
+                    "content": "You are a Russian propaganda detector. Respond concisely with the narratives present in JSON format.",
+                },
+                {
+                    "role": "user",
+                    "content": f"""
+                    Here's a transcript from a video:
+                    <text>
+                    {text}
+                    </text>
+            
+                    Your previous analysis showed that the video contains Russian narratives:
+                    <analysis>
+                    {cot_analysis}
+                    </analysis>
+
+                    Here is a list of known Russian narratives:
+                    <known_narratives>
+                    {known_narratives}
+                    </known_narratives>
+
+                    Write a concise list of {russian_narratives_instructions}.
+                    """,
+                },
+            ],
+            response_format=DisinformationResponseOnlyNarratives,
+        )
+        response_json = completion.choices[0].message.content
+        response_dict = json.loads(response_json)
+        response_dict["result"] = 1  # Set the result to 1 for "yes" answers
+        return response_dict
+    else:
+        # If not an early yes, ask for further analysis
+        completion = client.beta.chat.completions.parse(
+            model="gpt-4o-mini",
+            messages=[
+                {
+                    "role": "system",
+                    "content": "You are a Russian propaganda detector. Respond concisely in JSON format.",
+                },
+                {
+                    "role": "user",
+                    "content": f"""
+                    Here's a transcript from a video:
+                    <text>
+                    {text}
+                    </text>
+            
+                    Here is your previous analysis of whether it contains Russian narratives:
+                    {cot_analysis}
+
+                    Here is a list of known Russian narratives:
+                    <known_narratives>
+                    {known_narratives}
+                    </known_narratives>
+            
+                    Based on the text and your previous analysis, respond 1 if there is Russian propaganda; respond 0 if not, or if it is ambiguous.
+
+                    Then write a concise list of {russian_narratives_instructions}.
+                    """,
+                },
+            ],
+            response_format=DisinformationResponseWithResult,
+        )
+        response_json = completion.choices[0].message.content
+        return json.loads(response_json)
+
+narratives = []
+NARRATIVES_PATH = "narratives.json"
+def tag_narratives(url):
+    """Takes video url and reads its transcript to tag with disinformation narratives."""
+    global narratives
+    if narratives == []:
+        with open(NARRATIVES_PATH, 'r') as f:
+            narratives = json.load(f)["narratives"]
+    
+    metadata = get_metadata(url)
+    transcript = metadata["transcript"]
+    result = check_disinformation(transcript)
+    disinformation_found = result["result"] == 1
+    update_metadata(url, "disinformation_found", disinformation_found)
+    update_metadata(url, "narratives", result["narratives"])
+
+
 ### Test case if run as main
 
 if __name__ == "__main__":
-    url = 'https://www.tiktok.com/@jeffrey1012/video/7298550647857728786?q=ukraine%20war%20corruption&t=1731700011325'
-    os.makedirs(DATA_DIR, exist_ok=True)
-    for file in os.listdir(DATA_DIR):
-        file_path = os.path.join(DATA_DIR, file)
-        try:
-            if os.path.isfile(file_path):
-                os.unlink(file_path)
-        except Exception as e:
-            print(f"Error deleting {file_path}: {e}")
-
-    download_video(url)
-    extract_comments(url)
-    transcribe_mp4(url)
-    urls = get_video_urls_from_user("cakedivy")
-    print(urls)
+    #url = 'https://www.tiktok.com/@cakedivy/video/7427654268519189791?is_from_webapp=1&sender_device=pc'  # normal video
+    url = 'https://www.tiktok.com/@jeffrey1012/video/7298550647857728786?q=ukraine%20war%20corruption&t=1731700011325'  # disinfo video
+    sync_metadata()
+    #download_video(url)
+    #extract_comments(url)
+    #transcribe_mp4(url)
+    #write_metadata()
+    #urls = get_video_urls_from_user("cakedivy", n=3)
+    tag_narratives(url)
     write_metadata()
