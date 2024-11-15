@@ -5,6 +5,7 @@ import ast
 import json
 import hashlib
 import pandas as pd
+from datetime import datetime, timezone
 
 from openai import OpenAI
 from moviepy.editor import VideoFileClip
@@ -181,6 +182,16 @@ def transcribe_mp4(url: str):
 
 ### Get user's videos
 
+THREE_DAYS_OLD = 3 * 3600 * 24
+def video_is_recent(video_data: dict):
+    """Takes video data and returns whether it's from the last few days."""
+    timestamp_str = video_data["timestamp"]
+    timestamp = datetime.strptime(timestamp_str, "%Y-%m-%dT%H:%M:%S")
+    timestamp = timestamp.replace(tzinfo=timezone.utc)
+    current_time = datetime.now(timezone.utc)
+    time_diff_in_seconds = abs((current_time - timestamp).total_seconds())
+    return time_diff_in_seconds < THREE_DAYS_OLD
+
 def get_video_urls_from_user(username: str, n=3):
     """Takes username and returns urls of some recent videos by them."""
     metadata_path = os.path.join(DATA_DIR, hash_url(url) + "_videos.json")
@@ -199,6 +210,7 @@ def get_video_urls_from_user(username: str, n=3):
     urls = [
         f'https://www.tiktok.com/@{username}/video/{video_id}'
         for video_id, data in video_metadata.items()
+        if video_is_recent(data)
     ]
     os.remove(metadata_path)
     return urls
@@ -208,9 +220,9 @@ def get_video_urls_from_user(username: str, n=3):
 
 if __name__ == "__main__":
     url = 'https://www.tiktok.com/@cakedivy/video/7427654268519189791?is_from_webapp=1&sender_device=pc'
-    download_video(url)
-    extract_comments(url)
-    transcribe_mp4(url)
-    urls = get_video_urls_from_user("cakedivy")
+    #download_video(url)
+    #extract_comments(url)
+    #transcribe_mp4(url)
+    urls = get_video_urls_from_user("cakedivy", n=1)
     print(urls)
     write_metadata()
