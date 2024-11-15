@@ -131,6 +131,7 @@ def get_comment_data(comment):
     
     return {
         'commenter_id': user_dict['uid'],
+        'username': user_dict['unique_id'],
         'text': comment.text,
         'likes': comment.digg_count,
         'timestamp': comment.create_time,
@@ -139,7 +140,7 @@ def get_comment_data(comment):
 def extract_comments(url: str, n=30):
     """Takes url and adds comments to video metadata."""
     comments_df = pyk.save_tiktok_comments(
-        'https://www.tiktok.com/@tiktok/video/7106594312292453675',
+        url,
         comment_count=n,
         save_comments=False,
         return_comments=True
@@ -177,6 +178,22 @@ def transcribe_mp4(url: str):
     os.remove(video_path)
     os.remove(audio_filename)
 
+### Get user's videos
+
+def get_video_urls_from_user(username: str):
+    """Takes username and returns some recent videos by them."""
+    try:
+        videos_path = os.path.join(DATA_DIR, hash_url(url) + "_videos.json")
+        pyk.save_tiktok_multi_page(
+            username,
+            ent_type='user',
+            save_video=False,
+            metadata_fn=videos_path,
+        )
+    except:
+        pass
+
+
 
 ### Test case if run as main
 
@@ -185,4 +202,6 @@ if __name__ == "__main__":
     download_video(url)
     extract_comments(url)
     transcribe_mp4(url)
+    #urls = get_video_urls_from_user("cakedivy")
+    #print(urls)
     write_metadata()
