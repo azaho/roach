@@ -40,6 +40,12 @@ def get_metadata(url: str):
     url = clean_url(url)
     return metadata[url]
 
+def get_metadata_by_author(author_id: str):
+    for url, data in metadata.items():
+        if data["author_id"] == author_id:
+            return data
+    return {}
+
 
 def download_video(url: str):
     """Download TikTok video."""
