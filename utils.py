@@ -14,6 +14,8 @@ metadata = {}
 METADATA_FILE = "metadata.json"
 DATA_DIR = "tiktok_data/"
 
+### URL helpers
+
 def clean_url(url: str) -> str:
     """Remove query parameters from URL."""
     return url.split('?')[0]
@@ -22,11 +24,12 @@ def hash_url(url: str) -> str:
     """Turn url into unique hash."""
     return hashlib.md5(url.encode()).hexdigest()
 
+### Metadata helpers
+
 def write_metadata():
     """Write metadata to disk. Slow, call sparingly."""
     with open('metadata.json', 'w') as f:
         f.write(json.dumps(metadata))
-
 
 def update_metadata(url: str, update_key: str, update_val):
     """Add field to a video's metadata."""
@@ -40,7 +43,6 @@ def update_metadata(url: str, update_key: str, update_val):
         metadata[url] = {"url": url}
     metadata[url][update_key] = update_val
 
-
 def get_metadata(url: str):
     """Returns metadata object given url identifier."""
     url = clean_url(url)
@@ -52,6 +54,7 @@ def get_metadata_by_author(author_id: str):
             return data
     return {}
 
+### Download video
 
 def download_video(url: str):
     """Download TikTok video."""
@@ -108,7 +111,16 @@ def get_video_metadata(metadata_path: str):
         }
     return video_data
 
-def transcribe_mp4(url):
+### Extract comments
+
+def extract_comments(url: str):
+    """Takes url and adds comments to video metadata."""
+
+
+### Transcribe video
+
+def transcribe_mp4(url: str):
+    """Takes url and adds transcription to video metadata."""
     try:
         video_metadata = get_metadata(url)
     except:
@@ -136,8 +148,11 @@ def transcribe_mp4(url):
     os.remove(audio_filename)
 
 
+### Test case if run as main
+
 if __name__ == "__main__":
     url = 'https://www.tiktok.com/@cakedivy/video/7427654268519189791?is_from_webapp=1&sender_device=pc'
     download_video(url)
+    extract_comments(url)
     transcribe_mp4(url)
     write_metadata()
