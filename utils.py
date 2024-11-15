@@ -1,8 +1,10 @@
 # utils.py
 import os
 import csv
+import ast
 import json
 import hashlib
+import pandas as pd
 
 from openai import OpenAI
 from moviepy.editor import VideoFileClip
@@ -113,9 +115,37 @@ def get_video_metadata(metadata_path: str):
 
 ### Extract comments
 
-def extract_comments(url: str):
-    """Takes url and adds comments to video metadata."""
+def _convert_none_strings(d):
+    if isinstance(d, dict):
+        return {k: _convert_none_strings(v) for k, v in d.items()}
+    elif isinstance(d, list):
+        return [_convert_none_strings(x) for x in d]
+    elif d == 'None':
+        return None
+    return d
 
+def get_comment_data(comment):
+    """Takes in dataframe row and returns dict."""
+    # Parse the user dictionary string
+    user_dict = _convert_none_strings(comment.user)
+    
+    return {
+        'commenter_id': user_dict['uid'],
+        'text': comment.text,
+        'likes': comment.digg_count,
+        'timestamp': comment.create_time,
+    }
+
+def extract_comments(url: str, n=30):
+    """Takes url and adds comments to video metadata."""
+    comments_df = pyk.save_tiktok_comments(
+        'https://www.tiktok.com/@tiktok/video/7106594312292453675',
+        comment_count=n,
+        save_comments=False,
+        return_comments=True
+    )
+    comments_list = [get_comment_data(comment) for comment in comments_df.itertuples()]
+    update_metadata(url, "comments", comments_list)
 
 ### Transcribe video
 
