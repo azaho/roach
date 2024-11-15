@@ -1,8 +1,11 @@
 # utils.py
+import os
+import csv
+import json
+import hashlib
+
 from openai import OpenAI
 from moviepy.editor import VideoFileClip
-import os
-import json
 
 import pyktok as pyk
 pyk.specify_browser('safari')
@@ -15,6 +18,9 @@ def clean_url(url: str) -> str:
     """Remove query parameters from URL."""
     return url.split('?')[0]
 
+def hash_url(url: str) -> str:
+    """Turn url into unique hash."""
+    return hashlib.md5(url.encode()).hexdigest()
 
 def write_metadata():
     """Write metadata to disk. Slow, call sparingly."""
@@ -49,13 +55,16 @@ def get_metadata_by_author(author_id: str):
 
 def download_video(url: str):
     """Download TikTok video."""
+    metadata_path = os.path.join(DATA_DIR, hash_url(url) + "_metadata.json")
     paths = pyk.save_tiktok(
         url,
         True,
-        "test.json",
+        metadata_path,
         'safari',
         return_fns=True,
     )
+
+    # write local video path
     video_path, metadata_path = paths["video_fn"], paths["metadata_fn"]
     os.makedirs(DATA_DIR, exist_ok=True)
     video_filename = os.path.basename(video_path)
@@ -63,6 +72,41 @@ def download_video(url: str):
     os.rename(video_path, new_video_path)
     update_metadata(url, "local_video_path", new_video_path)
 
+    # write video metadata
+    video_metadata = get_video_metadata(metadata_path)
+    update_metadata(url, "username", video_metadata["author"]["username"])
+    update_metadata(url, "timestamp", video_metadata["timestamp"])
+    update_metadata(url, "stats", video_metadata["stats"])
+    update_metadata(url, "description", video_metadata["description"])
+    update_metadata(url, "location", video_metadata["location"])
+    os.remove(metadata_path)
+
+def get_video_metadata(metadata_path: str):
+    """Extracts info from a video's metadata csv and writes to global metadata."""
+    video_data = {}
+    with open(metadata_path) as f:
+        reader = csv.DictReader(f)
+        # there's just one row, but we read them all anyway
+        row = next(reader)
+        vid = row['video_id']
+        video_data = {
+            'video_id': row['video_id'],
+            'timestamp': row['video_timestamp'],
+            'stats': {
+                'duration': int(row['video_duration']),
+                'likes': int(row['video_diggcount']),
+                'shares': int(row['video_sharecount']), 
+                'comments': int(row['video_commentcount']),
+                'plays': int(row['video_playcount'])
+            },
+            'author': {
+                'username': row['author_username'],
+                'name': row['author_name']
+            },
+            'description': row['video_description'],
+            'location': row['video_locationcreated']
+        }
+    return video_data
 
 def transcribe_mp4(url):
     try:
