@@ -6,7 +6,7 @@ import ast
 import json
 import hashlib
 import pandas as pd
-from typing import Union
+from typing import Tuple
 from pydantic import BaseModel
 from datetime import datetime, timezone
 
@@ -244,12 +244,16 @@ def get_video_urls_from_user(username: str, n=3):
 ### Tag video with narratives (Reality Check!)
 
 # Define Pydantic models for structured responses
+class Narrative(BaseModel):
+    narrative_str: str
+    narrative_number: int
+
 class DisinformationResponseWithResult(BaseModel):
     result: int
-    narratives: list[Union[str, int]]
+    narratives: list[Narrative]
 
 class DisinformationResponseOnlyNarratives(BaseModel):
-    narratives: list[Union[str, int]]
+    narratives: list[Narrative]
 
 known_narratives = """
 1. The "special military operation" is not a war, but a "liberation" of the Ukrainian people.
@@ -418,7 +422,7 @@ def tag_narratives(url):
     transcript = metadata["transcript"]
     result = check_disinformation(transcript)
     disinformation_found = result["result"] == 1
-    narratives = result["narratives"][1::2]  # get integer ids, skipping over narrative strings
+    narratives = [narrative["narrative_number"] for narrative in result["narratives"]]
     update_metadata(url, "disinformation_found", disinformation_found)
     update_metadata(url, "narratives", narratives)
 
@@ -427,12 +431,12 @@ def tag_narratives(url):
 
 if __name__ == "__main__":
     #url = 'https://www.tiktok.com/@cakedivy/video/7427654268519189791?is_from_webapp=1&sender_device=pc'  # normal video
-    url = 'https://www.tiktok.com/@jeffrey1012/video/7298550647857728786?q=ukraine%20war%20corruption&t=1731700011325'  # disinfo video
+    url = 'https://www.tiktok.com/@jeffrey1012/video/7298550647857728786'  # disinfo video
     sync_metadata()
-    #download_video(url)
-    #extract_comments(url)
-    #transcribe_mp4(url)
-    #write_metadata()
+    download_video(url)
+    extract_comments(url)
+    transcribe_mp4(url)
+    write_metadata()
     #urls = get_video_urls_from_user("cakedivy", n=3)
     tag_narratives(url)
     write_metadata()
