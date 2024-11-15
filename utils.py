@@ -14,6 +14,7 @@ def clean_url(url: str) -> str:
    return url.split('?')[0]
 
 def write_metadata():
+    """Write metadata to disk. Slow, call sparingly."""
     with open('metadata.json', 'w') as f:
         f.write(json.dumps(metadata))
 
@@ -27,7 +28,6 @@ def update_metadata(url: str, update_key: str, update_val):
     if url not in metadata:
         metadata[url] = {}
     metadata[url][update_key] = update_val
-    write_metadata()
 
 def download_video(url: str, csv_output_path: str):
     """Download TikTok video."""
@@ -50,3 +50,4 @@ if __name__ == "__main__":
         'https://www.tiktok.com/@extramediummedia/video/7437256130079788330?is_from_webapp=1&sender_device=pc',
         'video_data.csv',
     )
+    write_metadata()
