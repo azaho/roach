@@ -217,7 +217,7 @@ def get_video_urls_from_user(username: str, n=3):
 ### Test case if run as main
 
 if __name__ == "__main__":
-    url = 'https://www.tiktok.com/@cakedivy/video/7427654268519189791?is_from_webapp=1&sender_device=pc'
+    url = 'https://www.tiktok.com/@jeffrey1012/video/7298550647857728786?q=ukraine%20war%20corruption&t=1731700011325'
     os.makedirs(DATA_DIR, exist_ok=True)
     for file in os.listdir(DATA_DIR):
         file_path = os.path.join(DATA_DIR, file)
