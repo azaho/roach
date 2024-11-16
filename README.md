@@ -4,6 +4,8 @@ Roach is a versatile and predictive tool designed to detect, analyze, and filter
 
 [View Project Presentation](https://drive.google.com/file/d/1c_umZbdYyWSTJRDq0mFKB2S7BWIGSKYd/view?usp=sharing)
 
+> **Note**: This project uses an adapted version of the [pyktok](https://github.com/dfreelon/pyktok) library for TikTok data collection.
+
 ---
 
 ## 🔗 How to run this
