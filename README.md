@@ -17,7 +17,7 @@ Roach is a versatile and predictive tool designed to detect, analyze, and filter
 
 2. Install dependencies:
    ```bash
-   pip install -r requirements.txt
+   pip install openai moviepy python-dotenv pyktok pandas pydantic
    ```
 
 3. Run the main script:
@@ -93,12 +93,11 @@ Roach is a versatile and predictive tool designed to detect, analyze, and filter
   ---
 
 ## 🌟 Team Members
-
-- **Dima Yanovsky**  
+- **Dima Yanovsky** ([LinkedIn](https://www.linkedin.com/in/yanovsk/))  
   *MIT Class of 2025*  
-- **Laker Newhouse**  
+- **Laker Newhouse** ([LinkedIn](https://www.linkedin.com/in/lakernewhouse/))  
   *MIT Class of 2025*  
-- **Andrii Zahorodnii**  
+- **Andrii Zahorodnii** ([LinkedIn](https://www.linkedin.com/in/zaho/))  
   *MIT Class of 2024*
 
 ---
