@@ -13,16 +13,16 @@ from datetime import datetime, timezone
 from openai import OpenAI
 from moviepy.editor import VideoFileClip
 
-import pyktok as pyk
+from pyktok_local.pyktok import specify_browser, save_tiktok, save_tiktok_comments, save_tiktok_multi_page
 
-PYK_BROWSER = 'safari' 
+PYK_BROWSER = 'firefox' 
 
 from dotenv import load_dotenv
 # Load environment variables from .env file
 load_dotenv()
 
 
-pyk.specify_browser(PYK_BROWSER)
+specify_browser(PYK_BROWSER)
 
 metadata = {}
 METADATA_FILE = "metadata.json"
@@ -69,6 +69,16 @@ def update_metadata(url: str, update_key: str, update_val):
         metadata[url] = {"url": url}
     metadata[url][update_key] = update_val
 
+def transfer_metadata(url: str, to_filename: str):
+    """Add field to a video's metadata."""
+    sync_metadata()
+    url = clean_url(url)
+    with open(to_filename, 'r') as f:
+        to_file = json.load(f)
+    to_file[url] = metadata[url]
+    with open(to_filename, 'w') as f:
+        json.dump(to_file, f)
+
 def get_metadata(url: str):
     """Returns metadata object given url identifier."""
     url = clean_url(url)
@@ -85,7 +95,7 @@ def get_metadata_by_author(author_id: str):
 def download_video(url: str):
     """Download TikTok video."""
     metadata_path = os.path.join(DATA_DIR, hash_url(url) + "_metadata.json")
-    paths = pyk.save_tiktok(
+    paths = save_tiktok(
         url,
         True,
         metadata_path,
@@ -113,7 +123,7 @@ def download_video(url: str):
 def get_video_metadata(metadata_path: str, single_video: bool = False):
     """Extracts info from a video's metadata csv and writes to global metadata."""
     video_data = {}
-    with open(metadata_path) as f:
+    with open(metadata_path, encoding="utf8") as f:
         reader = csv.DictReader(f)
         # there's just one row, but we read them all anyway
         for row in reader:
@@ -166,7 +176,7 @@ def get_comment_data(comment):
 
 def extract_comments(url: str, n=30):
     """Takes url and adds comments to video metadata."""
-    comments_df = pyk.save_tiktok_comments(
+    comments_df = save_tiktok_comments(
         url,
         comment_count=n,
         save_comments=False,
@@ -217,27 +227,30 @@ def video_is_recent(video_data: dict):
     time_diff_in_seconds = abs((current_time - timestamp).total_seconds())
     return time_diff_in_seconds < THREE_DAYS_OLD
 
-def get_video_urls_from_user(username: str, n=3):
+def get_video_urls_from_user(username: str, n=1):
     """Takes username and returns urls of some recent videos by them."""
-    metadata_path = os.path.join(DATA_DIR, hash_url(url) + "_videos.json")
+    metadata_path = os.path.join(DATA_DIR, hash_url(username) + "_videos.json")
     try:
-        pyk.save_tiktok_multi_page(
+        save_tiktok_multi_page(
             username,
             ent_type='user',
             video_ct=n,
             save_video=False,
             metadata_fn=metadata_path,
         )
-    except:
-        pass
+    except Exception as e:
+        print(f"Error getting videos for user {username}: {e}")
+        return []
+    if not os.path.exists(metadata_path):
+        return []
 
     video_metadata = get_video_metadata(metadata_path, single_video=False)
     urls = [
         f'https://www.tiktok.com/@{username}/video/{video_id}'
         for video_id, data in video_metadata.items()
-        if video_is_recent(data)
+        #if video_is_recent(data)
     ]
-    os.remove(metadata_path)
+    #os.remove(metadata_path)
     return urls
 
 
@@ -418,6 +431,7 @@ def tag_narratives(url):
     narratives = [narrative["narrative_number"] for narrative in result["narratives"]]
     update_metadata(url, "disinformation_found", disinformation_found)
     update_metadata(url, "narratives", narratives)
+    return narratives
 
 
 ### Test case if run as main
